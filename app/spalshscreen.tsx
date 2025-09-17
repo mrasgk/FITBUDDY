@@ -10,7 +10,7 @@ export default function SplashScreen({ onAnimationFinish }: { onAnimationFinish:
   useEffect(() => {
     const timer = setTimeout(() => {
       onAnimationFinish();
-    }, 3000); // Show splash screen for 2.5 seconds
+    }, 3000); 
 
     return () => clearTimeout(timer);
   }, [onAnimationFinish]);
@@ -26,7 +26,7 @@ export default function SplashScreen({ onAnimationFinish }: { onAnimationFinish:
       </View>
       
       <View style={styles.footer}>
-        <View style={styles.loadingBar}>
+        <View style={[styles.loadingBar, { backgroundColor: colors.tabIconDefault }]}>
           <View style={[styles.progress, { backgroundColor: PrimaryColor }]} />
         </View>
         <Text style={[styles.tagline, { color: colors.icon }]}>Your Sports, Your People</Text>
@@ -47,15 +47,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    width: 200,
-    height: 200,
+    width: 300,
+    height: 300,
     marginBottom: 20,
-  },
-  appName: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    fontFamily: Fonts.sans,
-    marginTop: 16,
   },
   footer: {
     marginBottom: 60,
@@ -65,7 +59,6 @@ const styles = StyleSheet.create({
   loadingBar: {
     width: '60%',
     height: 4,
-    backgroundColor: Colors.background,
     borderRadius: 2,
     overflow: 'hidden',
     marginBottom: 16,
