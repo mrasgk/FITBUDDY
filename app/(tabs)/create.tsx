@@ -3,7 +3,7 @@ import { CustomNotification, NotificationType } from '@/components/ui/notificati
 import { Colors, PrimaryColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { Activity } from '@/service/ActivitiesData';
-import { activityService, CreateActivityRequest } from '@/service/ActivityService';
+import { createActivityService } from '@/service';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -57,6 +57,18 @@ export default function CreatePage() {
   const [isCreating, setIsCreating] = useState(false);
   const [stepProgress] = useState(new Animated.Value(0));
   
+  // Modern animation references
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const slideAnim = React.useRef(new Animated.Value(50)).current;
+  const scaleAnim = React.useRef(new Animated.Value(0.95)).current;
+  const cardAnimations = React.useRef(
+    Array.from({ length: 6 }, () => ({
+      scale: new Animated.Value(1),
+      opacity: new Animated.Value(0),
+      translateY: new Animated.Value(30)
+    }))
+  ).current;
+  
   const [notification, setNotification] = useState<{
     visible: boolean;
     type: NotificationType;
@@ -78,17 +90,85 @@ export default function CreatePage() {
     setNotification(prev => ({ ...prev, visible: false }));
   };
 
+  // Initialize entrance animations
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: true,
+      })
+    ]).start();
+
+    // Staggered card animations
+    const cardStagger = cardAnimations.map((anim, index) => 
+      Animated.parallel([
+        Animated.timing(anim.opacity, {
+          toValue: 1,
+          duration: 600,
+          delay: index * 100,
+          useNativeDriver: true,
+        }),
+        Animated.spring(anim.translateY, {
+          toValue: 0,
+          tension: 50,
+          friction: 8,
+          delay: index * 100,
+          useNativeDriver: true,
+        })
+      ])
+    );
+    
+    Animated.stagger(50, cardStagger).start();
+  }, []);
+
+  // Card press animation
+  const animateCardPress = (index: number) => {
+    const anim = cardAnimations[index];
+    Animated.sequence([
+      Animated.spring(anim.scale, {
+        toValue: 0.95,
+        tension: 300,
+        friction: 10,
+        useNativeDriver: true,
+      }),
+      Animated.spring(anim.scale, {
+        toValue: 1,
+        tension: 300,
+        friction: 10,
+        useNativeDriver: true,
+      })
+    ]).start();
+  };
+
   const updateFormData = (updates: Partial<ActivityFormData>) => {
     setFormData(prev => ({ ...prev, ...updates }));
   };
 
-  const handleActivityTypeSelect = (activityType: Activity['type']) => {
+  const handleActivityTypeSelect = (activityType: Activity['type'], index: number) => {
+    animateCardPress(index);
     updateFormData({ 
       type: activityType,
       title: `${activityType} Game`,
       maxParticipants: activityType === 'Basketball' ? 10 : activityType === 'Tennis' ? 4 : 22
     });
-    handleNextStep();
+    
+    // Delay navigation for animation
+    setTimeout(() => {
+      handleNextStep();
+    }, 200);
   };
 
   const getStepIndex = (step: FormStep): number => {
@@ -152,7 +232,8 @@ export default function CreatePage() {
     setIsCreating(true);
     
     try {
-      const activityData: CreateActivityRequest = {
+      // Use the new create activity service
+      const newActivity = await createActivityService.createActivity({
         type: formData.type,
         title: formData.title,
         description: formData.description,
@@ -163,9 +244,7 @@ export default function CreatePage() {
         maxParticipants: formData.maxParticipants,
         isPublic: formData.isPublic,
         requiredSkillLevel: formData.requiredSkillLevel,
-      };
-
-      const newActivity = await activityService.createActivity(activityData);
+      });
       
       showNotification(
         'success',
@@ -238,69 +317,96 @@ export default function CreatePage() {
     switch (currentStep) {
       case 'type':
         return (
-          <View style={styles.stepContent}>
+          <Animated.View 
+            style={[
+              styles.stepContent,
+              {
+                opacity: fadeAnim,
+                transform: [
+                  { translateY: slideAnim },
+                  { scale: scaleAnim }
+                ]
+              }
+            ]}
+          >
             <View style={styles.stepHeader}>
               <Text style={[styles.stepTitle, { color: colors.text }]}>Choose Activity Type</Text>
               <Text style={[styles.stepSubtitle, { color: colors.icon }]}>What sport would you like to organize?</Text>
             </View>
             
             <View style={styles.activityGrid}>
-              {activityTypes.map((activity, index) => (
-                <Animated.View
-                  key={activity.id}
-                  style={{
-                    opacity: 1,
-                    transform: [{
-                      translateY: 0
-                    }]
-                  }}
-                >
-                  <TouchableOpacity
+              {activityTypes.map((activity, index) => {
+                const cardAnim = cardAnimations[index];
+                return (
+                  <Animated.View
+                    key={activity.id}
                     style={[
-                      styles.activityCard,
-                      { 
-                        backgroundColor: formData.type === activity.id 
-                          ? activity.color + '15'
-                          : colors.surface,
-                        borderColor: formData.type === activity.id 
-                          ? activity.color
-                          : colors.border,
-                        borderWidth: formData.type === activity.id ? 2 : 1,
-                        shadowColor: formData.type === activity.id ? activity.color : '#000',
-                        shadowOpacity: formData.type === activity.id ? 0.3 : 0.1,
-                        elevation: formData.type === activity.id ? 8 : 3,
+                      {
+                        width: '48%',
+                        marginBottom: 16,
+                        opacity: cardAnim.opacity,
+                        transform: [
+                          { translateY: cardAnim.translateY },
+                          { scale: cardAnim.scale }
+                        ]
                       }
                     ]}
-                    activeOpacity={0.7}
-                    onPress={() => handleActivityTypeSelect(activity.id as Activity['type'])}
                   >
-                    <View style={[
-                      styles.iconContainer,
-                      { 
-                        backgroundColor: activity.color + '20',
-                        borderColor: activity.color + '30',
-                        borderWidth: 1
-                      }
-                    ]}>
-                      <IconSymbol
-                        name={activity.icon as any}
-                        size={32}
-                        color={activity.color}
-                      />
-                    </View>
-                    <Text style={[styles.activityName, { color: colors.text }]}>
-                      {activity.name}
-                    </Text>
-                    {formData.type === activity.id && (
-                      <View style={[styles.selectedIndicator, { backgroundColor: activity.color }]}>
-                        <IconSymbol name="checkmark" size={12} color="white" />
+                    <TouchableOpacity
+                      style={[
+                        styles.activityCard,
+                        { 
+                          backgroundColor: formData.type === activity.id 
+                            ? activity.color + '15'
+                            : colors.surface,
+                          borderColor: formData.type === activity.id 
+                            ? activity.color
+                            : colors.border,
+                          borderWidth: formData.type === activity.id ? 2 : 1,
+                          shadowColor: formData.type === activity.id ? activity.color : '#000',
+                          shadowOpacity: formData.type === activity.id ? 0.3 : 0.1,
+                          elevation: formData.type === activity.id ? 8 : 3,
+                        }
+                      ]}
+                      activeOpacity={0.9}
+                      onPress={() => handleActivityTypeSelect(activity.id as Activity['type'], index)}
+                    >
+                      <View style={[
+                        styles.iconContainer,
+                        { 
+                          backgroundColor: activity.color + '20',
+                          borderColor: activity.color + '30',
+                          borderWidth: 1
+                        }
+                      ]}>
+                        <IconSymbol
+                          name={activity.icon as any}
+                          size={32}
+                          color={activity.color}
+                        />
                       </View>
-                    )}
-                  </TouchableOpacity>
-                </Animated.View>
-              ))}
+                      <Text style={[styles.activityName, { color: colors.text }]}>
+                        {activity.name}
+                      </Text>
+                      {formData.type === activity.id && (
+                        <Animated.View 
+                          style={[
+                            styles.selectedIndicator, 
+                            { 
+                              backgroundColor: activity.color,
+                              transform: [{ scale: scaleAnim }]
+                            }
+                          ]}
+                        >
+                          <IconSymbol name="checkmark" size={12} color="white" />
+                        </Animated.View>
+                      )}
+                    </TouchableOpacity>
+                  </Animated.View>
+                );
+              })}
             </View>
-          </View>
+          </Animated.View>
         );
         
       case 'details':
@@ -392,29 +498,39 @@ export default function CreatePage() {
         return (
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.stepContent}>
-              <Text style={[styles.stepTitle, { color: colors.text }]}>Location</Text>
-              <Text style={[styles.stepSubtitle, { color: colors.icon }]}>Where will the activity take place?</Text>
-              
-              <View style={styles.formGroup}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>Venue/Address</Text>
-                <TextInput
-                  style={[styles.textInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-                  value={formData.location}
-                  onChangeText={(text) => updateFormData({ location: text })}
-                  placeholder="e.g., Central Park Basketball Courts"
-                  placeholderTextColor={colors.icon}
-                />
+              <View style={styles.stepHeader}>
+                <Text style={[styles.stepTitle, { color: colors.text }]}>Location</Text>
+                <Text style={[styles.stepSubtitle, { color: colors.icon }]}>Where will the activity take place?</Text>
               </View>
               
-              <View style={styles.formGroup}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>City</Text>
-                <TextInput
-                  style={[styles.textInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-                  value={formData.city}
-                  onChangeText={(text) => updateFormData({ city: text })}
-                  placeholder="e.g., New York"
-                  placeholderTextColor={colors.icon}
-                />
+              <View style={styles.formContainer}>
+                <View style={styles.formGroup}>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Venue/Address *</Text>
+                  <TextInput
+                    style={[styles.textInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                    value={formData.location}
+                    onChangeText={(text) => updateFormData({ location: text })}
+                    placeholder="e.g., Central Park Basketball Courts"
+                    placeholderTextColor={colors.icon}
+                  />
+                </View>
+                
+                <View style={styles.formGroup}>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>City *</Text>
+                  <View style={[styles.citySelector, { backgroundColor: colors.surface, borderColor: colors.border }]}>                    
+                    <IconSymbol name="location" size={20} color={colors.icon} />
+                    <TextInput
+                      style={[styles.cityInput, { color: colors.text }]}
+                      value={formData.city}
+                      onChangeText={(text) => updateFormData({ city: text })}
+                      placeholder="Select a city"
+                      placeholderTextColor={colors.icon}
+                      editable={true}
+                      onPressIn={() => {}}
+                    />
+                    <IconSymbol name="chevron.down" size={20} color={colors.icon} />
+                  </View>
+                </View>
               </View>
             </View>
           </TouchableWithoutFeedback>
@@ -596,7 +712,15 @@ export default function CreatePage() {
       style={[styles.container, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+      {/* Animated Header */}
+      <Animated.View 
+        style={[styles.header, { 
+          backgroundColor: colors.background, 
+          borderBottomColor: colors.border,
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }]
+        }]}
+      >
         <TouchableOpacity 
           style={styles.backButton} 
           onPress={() => currentStep === 'type' ? router.back() : handlePreviousStep()}
@@ -619,9 +743,15 @@ export default function CreatePage() {
             <Text style={[styles.skipButtonText, { color: PrimaryColor }]}>Preview</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </Animated.View>
 
-      <View style={[styles.progressContainer, { backgroundColor: colors.background }]}>
+      {/* Progress Bar */}
+      <Animated.View 
+        style={[styles.progressContainer, { 
+          backgroundColor: colors.background,
+          opacity: fadeAnim
+        }]}
+      >
         <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
           <Animated.View 
             style={[
@@ -637,14 +767,23 @@ export default function CreatePage() {
             ]} 
           />
         </View>
-      </View>
+      </Animated.View>
 
+      {/* Content with proper spacing */}
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {renderStepContent()}
       </ScrollView>
 
+      {/* Footer with better positioning */}
       {currentStep !== 'type' && currentStep !== 'preview' && (
-        <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+        <Animated.View 
+          style={[styles.footer, { 
+            backgroundColor: colors.background, 
+            borderTopColor: colors.border,
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }]
+          }]}
+        >
           <TouchableOpacity 
             style={[styles.footerButton, styles.secondaryButton, { borderColor: colors.border }]}
             onPress={handlePreviousStep}
@@ -668,7 +807,7 @@ export default function CreatePage() {
           >
             <Text style={[styles.primaryButtonText, { color: validateCurrentStep() ? 'white' : colors.icon }]}>Next</Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       )}
 
       <CustomNotification
@@ -740,6 +879,7 @@ const styles = StyleSheet.create({
   },
   stepContent: {
     padding: 20,
+    paddingBottom: 120, // Extra padding to prevent menu bar overlap
   },
   stepTitle: {
     fontSize: 28,
@@ -756,7 +896,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   activityCard: {
-    width: '48%',
+    width: '100%',
     padding: 20,
     borderRadius: 16,
     borderWidth: 1,
@@ -928,8 +1068,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 20,
     paddingVertical: 16,
+    paddingBottom: 32, // Extra padding to clear tab bar
     borderTopWidth: 1,
     gap: 16,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
   footerButton: {
     flex: 1,
@@ -964,6 +1109,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   formContainer: {
     flex: 1,
@@ -1008,11 +1161,35 @@ const styles = StyleSheet.create({
   skillLevelText: {
     fontSize: 14,
     fontWeight: '600',
+    textAlign: 'center',
+    flexWrap: 'nowrap',
   },
   toggleHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 4,
+  },
+  // Container and layout improvements
+  contentContainer: {
+    flex: 1,
+  },
+  activityCardContainer: {
+    width: '48%',
+    marginBottom: 16,
+  },
+  // City selector styles
+  citySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  cityInput: {
+    flex: 1,
+    fontSize: 16,
   },
 });

@@ -1,19 +1,20 @@
 import { Colors, PrimaryColor } from '@/constants/theme';
+import { createActivityService } from '@/service';
 import { Activity, getActivitiesByDate, sportColors } from '@/service/ActivitiesData';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    FlatList,
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    useColorScheme,
-    View
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useColorScheme,
+  View
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -106,11 +107,23 @@ export default function HomePage() {
 
   // Load activities for selected date
   useEffect(() => {
-    if (selectedDate) {
-      const activities = getActivitiesByDate(selectedDate);
-      setAllActivities(activities);
-      applyFilters(activities);
-    }
+    const loadActivities = async () => {
+      if (selectedDate) {
+        // Get original activities
+        const originalActivities = getActivitiesByDate(selectedDate);
+        
+        // Get created activities
+        const createdActivities = await createActivityService.getActivitiesByDate(selectedDate);
+        
+        // Combine both
+        const combinedActivities = [...originalActivities, ...createdActivities];
+        
+        setAllActivities(combinedActivities);
+        applyFilters(combinedActivities);
+      }
+    };
+    
+    loadActivities();
   }, [selectedDate]);
 
   // Apply filters when filters change
